@@ -106,6 +106,25 @@ func TestAddBatch_InconsistentVectorDimensions(t *testing.T) {
 	assert.Contains(t, err.Error(), "different lengths")
 }
 
+func TestAddBatch_RejectedMixedBatchDoesNotConsumeDimensionTracking(t *testing.T) {
+	index := testHNSW(t)
+	defer index.Shutdown(context.Background())
+
+	mixed := [][]float32{{1, 0, 0, 0}, {0, 1, 0}}
+	err := index.AddBatch(context.Background(), []uint64{1, 2}, mixed)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "different lengths")
+	assert.Equal(t, int32(0), index.dims.Load())
+
+	valid := [][]float32{{1, 0, 0, 0}, {0, 1, 0, 0}}
+	require.NoError(t, index.AddBatch(context.Background(), []uint64{1, 2}, valid))
+	assert.Equal(t, int32(4), index.dims.Load())
+
+	err = index.ValidateBeforeInsert([]float32{1, 2, 3})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Existing nodes have vectors with length 4")
+}
+
 func TestAddBatch_EmptyVector(t *testing.T) {
 	index := testHNSW(t)
 	defer index.Shutdown(context.Background())
